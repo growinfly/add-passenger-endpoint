@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+console.log('🔐 Headers:', req.headers);
 
 export const config = {
   api: {
