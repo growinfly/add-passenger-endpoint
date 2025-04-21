@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const fetch = require('node-fetch');
 
 module.exports.config = {
   api: {
@@ -81,14 +82,19 @@ module.exports = async function handler(req, res) {
 
       console.log('📩 Incoming message from user:', from, '| Text:', text);
 
-      // Use hello_world template
-      const helloWorldTemplate = {
+      const welcomeText = {
         messaging_product: 'whatsapp',
         to: from,
-        type: 'template',
-        template: {
-          name: 'hello_world',
-          language: { code: 'en_US' }
+        type: 'text',
+        text: {
+          preview_url: false,
+          body: `👋 Welcome to GrowIN Fly!
+
+Reply with:
+1️⃣ Add Passenger
+2️⃣ Get PNL Updates
+3️⃣ Special Request
+4️⃣ View Flights`
         }
       };
 
@@ -98,13 +104,13 @@ module.exports = async function handler(req, res) {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${process.env.ACCESS_TOKEN}`
         },
-        body: JSON.stringify(helloWorldTemplate)
+        body: JSON.stringify(welcomeText)
       });
 
       const respJson = await resp.json();
-      console.log('📤 Sent hello_world template. Response:', JSON.stringify(respJson));
+      console.log('📤 Sent welcome menu. Response:', JSON.stringify(respJson));
 
-      return res.status(200).send('hello_world sent');
+      return res.status(200).send('Auto-reply sent');
     }
 
     const { encrypted_aes_key, encrypted_flow_data, initial_vector } = json;
