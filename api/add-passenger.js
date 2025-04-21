@@ -9,8 +9,7 @@ export const config = {
 };
 
 // Load private RSA key (used to decrypt AES key from Meta)
-const privateKey = process.env.PRIVATE_KEY.replace(/\\n/g, '\n');
-
+const privateKey = fs.readFileSync(path.resolve('private_key.pem'), 'utf8');
 
 function decryptAESKey(encryptedAESKey) {
   return crypto.privateDecrypt(
