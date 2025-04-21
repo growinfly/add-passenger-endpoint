@@ -1,58 +1,63 @@
-// pages/api/add-passenger.js
-
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 
 export const config = {
   api: {
-    bodyParser: false,
-  },
+    bodyParser: false
+  }
 };
 
-// Load private RSA key (PKCS8 unencrypted PEM format)
 const privateKey = fs.readFileSync(path.resolve('private_key_pkcs8.pem'), 'utf8');
 
-function decryptAESKey(encryptedAESKeyBase64) {
+function decryptAESKey(encryptedAESKey) {
   return crypto.privateDecrypt(
     {
       key: privateKey,
       padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
-      oaepHash: 'sha256',
+      oaepHash: 'sha256'
     },
-    Buffer.from(encryptedAESKeyBase64, 'base64')
+    Buffer.from(encryptedAESKey, 'base64')
   );
 }
 
-function decryptPayload(encryptedFlowDataBase64, aesKey, ivBase64) {
+function decryptPayload(encryptedData, aesKey, ivBase64) {
+  const encryptedBuffer = Buffer.from(encryptedData, 'base64');
+  const tag = encryptedBuffer.slice(-16);
+  const ciphertext = encryptedBuffer.slice(0, -16);
   const iv = Buffer.from(ivBase64, 'base64');
-  const encrypted = Buffer.from(encryptedFlowDataBase64, 'base64');
-  const tag = encrypted.slice(-16);
-  const ciphertext = encrypted.slice(0, -16);
 
   const decipher = crypto.createDecipheriv('aes-128-gcm', aesKey, iv);
   decipher.setAuthTag(tag);
 
   const decrypted = Buffer.concat([
     decipher.update(ciphertext),
-    decipher.final(),
+    decipher.final()
   ]);
 
   return JSON.parse(decrypted.toString('utf8'));
 }
 
-function encryptResponsePayload(payload, aesKey, originalIVBase64) {
-  const originalIV = Buffer.from(originalIVBase64, 'base64');
-  const flippedIV = Buffer.from(originalIV.map((byte) => ~byte & 0xff));
+function encryptPayload(payload, aesKey, ivBase64) {
+  const flippedIv = Buffer.from(ivBase64, 'base64').map(b => ~b);
+  const cipher = crypto.createCipheriv('aes-128-gcm', aesKey, flippedIv);
 
-  const cipher = crypto.createCipheriv('aes-128-gcm', aesKey, flippedIV);
   const encrypted = Buffer.concat([
     cipher.update(JSON.stringify(payload), 'utf8'),
-    cipher.final(),
+    cipher.final()
   ]);
 
   const tag = cipher.getAuthTag();
   return Buffer.concat([encrypted, tag]).toString('base64');
+}
+
+function getRawBody(req) {
+  return new Promise((resolve, reject) => {
+    let data = '';
+    req.on('data', chunk => data += chunk);
+    req.on('end', () => resolve(Buffer.from(data)));
+    req.on('error', reject);
+  });
 }
 
 export default async function handler(req, res) {
@@ -60,61 +65,72 @@ export default async function handler(req, res) {
     return res.status(200).send('OK');
   }
 
-  try {
-    const buffers = [];
-    for await (const chunk of req) {
-      buffers.push(chunk);
-    }
-    const body = JSON.parse(Buffer.concat(buffers).toString());
+  const rawBody = await getRawBody(req);
 
-    const { encrypted_aes_key, encrypted_flow_data, initial_vector } = body;
+  try {
+    const parsed = JSON.parse(rawBody.toString());
+
+    // ✅ Health Check
+    if (parsed.action === 'ping') {
+      return res.status(200).json({ data: { status: 'active' } });
+    }
+
+    const { encrypted_flow_data, encrypted_aes_key, initial_vector } = parsed;
     const aesKey = decryptAESKey(encrypted_aes_key);
     const decrypted = decryptPayload(encrypted_flow_data, aesKey, initial_vector);
 
-    console.log('📥 Decrypted Payload:', decrypted);
+    console.log('✅ Decrypted payload:', decrypted);
 
-    const { action, screen, data } = decrypted;
-    if (action === 'data_exchange' && screen === 'CONFIRM') {
-      const { flight, title, first_name, last_name, dob } = data;
+    const { screen, action, data } = decrypted;
 
-      if (!flight || !title || !first_name || !last_name || !dob) {
-        const response = {
-          screen: 'CONFIRM',
-          data: {
-            error_message: 'Missing required fields',
-          },
-        };
-        const encrypted = encryptResponsePayload(response, aesKey, initial_vector);
-        return res.status(200).send(encrypted);
-      }
+    let response;
 
-      const response = {
-        screen: 'SUCCESS',
+    if (action === 'INIT') {
+      response = {
+        screen: 'SELECT_FLIGHT',
         data: {
-          extension_message_response: {
-            params: {
-              flow_token: decrypted.flow_token,
-              summary: `✅ ${title} ${first_name} ${last_name} booked on flight ${flight}`,
-            },
-          },
-        },
+          flights: [
+            { id: '5O765', title: '5O765 | EGC → FAO | 24/04/2025' },
+            { id: '5O766', title: '5O766 | FAO → CHR | 24/04/2025' }
+          ]
+        }
       };
-      const encrypted = encryptResponsePayload(response, aesKey, initial_vector);
-      return res.status(200).send(encrypted);
+    } else if (action === 'data_exchange') {
+      const { flight, title, first_name, last_name, dob } = data;
+      if (!flight || !title || !first_name || !last_name || !dob) {
+        response = {
+          screen: screen,
+          data: {
+            error_message: 'Missing required fields'
+          }
+        };
+      } else {
+        response = {
+          screen: 'SUCCESS',
+          data: {
+            extension_message_response: {
+              params: {
+                flow_token: decrypted.flow_token,
+                name: `${title} ${first_name} ${last_name}`,
+                dob,
+                flight
+              }
+            }
+          }
+        };
+      }
+    } else {
+      response = {
+        screen: screen,
+        data: {
+          error_message: 'Unhandled action'
+        }
+      };
     }
 
-    // Return to flight selection screen
-    const response = {
-      screen: 'SELECT_FLIGHT',
-      data: {
-        flights: [
-          { id: '5O765', title: '5O765 | EGC → FAO | 24/04/2025' },
-          { id: '5O766', title: '5O766 | FAO → CHR | 24/04/2025' },
-        ],
-      },
-    };
-    const encrypted = encryptResponsePayload(response, aesKey, initial_vector);
-    return res.status(200).send(encrypted);
+    const encryptedResponse = encryptPayload(response, aesKey, initial_vector);
+    return res.status(200).send(encryptedResponse);
+
   } catch (err) {
     console.error('❌ Failed to handle encrypted request:', err);
     return res.status(421).send('Encryption error');
