@@ -21,6 +21,10 @@ function decryptAESKey(encryptedAESKey) {
   );
 }
 
+console.log('🔐 Decrypted AES Key Length:', aesKey.length);
+console.log('🔐 AES Key (Base64):', aesKey.toString('base64'));
+
+
 function decryptPayload(encryptedData, aesKey, ivBase64) {
   const decipher = crypto.createDecipheriv('aes-128-cbc', aesKey, Buffer.from(ivBase64, 'base64'));
   let decrypted = decipher.update(Buffer.from(encryptedData, 'base64'));
