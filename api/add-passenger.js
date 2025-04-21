@@ -1,86 +1,73 @@
+import fs from 'fs';
+import path from 'path';
 import crypto from 'crypto';
 
 export const config = {
   api: {
-    bodyParser: false
+    bodyParser: true
   }
 };
 
-function decryptBody(encrypted, key, iv) {
-  const decipher = crypto.createDecipheriv(
-    'aes-256-cbc',
-    Buffer.from(key, 'base64'),
-    Buffer.from(iv, 'base64')
+// Load private RSA key (used to decrypt AES key from Meta)
+const privateKey = process.env.PRIVATE_KEY.replace(/\\n/g, '\n');
+
+
+function decryptAESKey(encryptedAESKey) {
+  return crypto.privateDecrypt(
+    {
+      key: privateKey,
+      padding: crypto.constants.RSA_PKCS1_PADDING
+    },
+    Buffer.from(encryptedAESKey, 'base64')
   );
-  let decrypted = decipher.update(Buffer.from(encrypted, 'base64'));
-  decrypted = Buffer.concat([decrypted, decipher.final()]);
-  return JSON.parse(decrypted.toString());
 }
 
-function encryptBody(payload, key, iv) {
-  const cipher = crypto.createCipheriv(
-    'aes-256-cbc',
-    Buffer.from(key, 'base64'),
-    Buffer.from(iv, 'base64')
-  );
-  let encrypted = cipher.update(JSON.stringify(payload));
+function decryptPayload(encryptedData, aesKey, ivBase64) {
+  const decipher = crypto.createDecipheriv('aes-128-cbc', aesKey, Buffer.from(ivBase64, 'base64'));
+  let decrypted = decipher.update(Buffer.from(encryptedData, 'base64'));
+  decrypted = Buffer.concat([decrypted, decipher.final()]);
+  return JSON.parse(decrypted.toString('utf8'));
+}
+
+function encryptResponse(response, aesKey, ivBase64) {
+  const cipher = crypto.createCipheriv('aes-128-cbc', aesKey, Buffer.from(ivBase64, 'base64'));
+  let encrypted = cipher.update(JSON.stringify(response), 'utf8');
   encrypted = Buffer.concat([encrypted, cipher.final()]);
   return encrypted.toString('base64');
 }
 
 export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(200).send('OK');
-  }
-  console.log('🔍 Incoming Headers:', req.headers);
+  try {
+    const { encrypted_flow_data, encrypted_aes_key, initial_vector } = req.body;
 
-
-  const signatureHeader = req.headers['x-meta-hub-signature'];
-  let rawBody = '';
-
-  await new Promise((resolve, reject) => {
-    req.on('data', chunk => (rawBody += chunk));
-    req.on('end', resolve);
-    req.on('error', reject);
-  });
-
-  // If this is a data_exchange (CONFIRM screen)
-  if (signatureHeader) {
-    try {
-      const [keyBase64, ivBase64] = signatureHeader.split('::');
-      const decrypted = decryptBody(rawBody, keyBase64, ivBase64);
-      console.log('📥 Decrypted data:', decrypted);
-
-      const { flight, title, first_name, last_name, dob } = decrypted;
-
-      if (!flight || !title || !first_name || !last_name || !dob) {
-        const encryptedError = encryptBody(
-          { success: false, message: 'Missing required fields' },
-          keyBase64,
-          ivBase64
-        );
-        return res.status(200).send(encryptedError);
-      }
-
-      const response = {
-        success: true,
-        message: `Passenger ${title} ${first_name} ${last_name} added to flight ${flight}`
-      };
-
-      const encryptedResponse = encryptBody(response, keyBase64, ivBase64);
-      return res.status(200).send(encryptedResponse);
-    } catch (error) {
-      console.error('❌ Decryption or encryption failed:', error);
-      return res.status(200).send('Encryption error'); // Meta will drop this but logs will help
+    if (!encrypted_flow_data || !encrypted_aes_key || !initial_vector) {
+      return res.status(400).json({ message: 'Missing encryption parameters' });
     }
-  }
 
-  // If no signature header — assume it's the first screen loading flights
-  console.log('ℹ️ No signature — returning flight list (SELECT_FLIGHT screen)');
-  return res.status(200).json({
-    flights: [
-      { id: '5O765', title: '5O765 | EGC → FAO | 24/04/2025' },
-      { id: '5O766', title: '5O766 | FAO → CHR | 24/04/2025' }
-    ]
-  });
+    // 1. Decrypt AES key (128-bit) using your private RSA key
+    const aesKey = decryptAESKey(encrypted_aes_key); // Buffer of 16 bytes
+
+    // 2. Decrypt incoming data using AES key + IV
+    const data = decryptPayload(encrypted_flow_data, aesKey, initial_vector);
+    console.log('✅ Decrypted request:', data);
+
+    const { flight, title, first_name, last_name, dob } = data;
+
+    if (!flight || !title || !first_name || !last_name || !dob) {
+      const errorPayload = { success: false, message: 'Missing one or more fields.' };
+      const encryptedError = encryptResponse(errorPayload, aesKey, initial_vector);
+      return res.status(200).send(encryptedError);
+    }
+
+    const successPayload = {
+      success: true,
+      message: `Passenger ${title} ${first_name} ${last_name} added to flight ${flight}`
+    };
+
+    const encryptedResponse = encryptResponse(successPayload, aesKey, initial_vector);
+    return res.status(200).send(encryptedResponse);
+  } catch (err) {
+    console.error('❌ Failed to handle encrypted request:', err);
+    return res.status(200).send('Encryption error'); // Still return 200 to avoid retries
+  }
 }
