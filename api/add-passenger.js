@@ -83,7 +83,7 @@ module.exports = async function handler(req, res) {
       console.log('📩 Incoming message from user:', from);
 
       const introMessage =
-        '👋 Welcome to GrowIN Fly!\n\nYou can:\n1️⃣ Add a passenger to a flight\n2️⃣ Subscribe to PNL updates\n3️⃣ Submit a special request\n4️⃣ View upcoming flights\n\nJust reply with the corresponding number or say "start" to begin.';
+  '		👋 Welcome to GrowIN Fly!\n\nWe are here to help you manage your upcoming flights. In here, you can:\n\n✈️ Add a Passenger\n💬 Add a Special Request\n🔍 View My Flights\n📩 View My PNLs\n\nPlease choose an option to get started 😎\nGrowIN Fly AI Assistant';
 
       const replyBody = {
         messaging_product: 'whatsapp',
