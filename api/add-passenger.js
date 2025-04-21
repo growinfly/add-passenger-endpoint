@@ -9,7 +9,7 @@ export const config = {
 };
 
 // Load private RSA key (used to decrypt AES key from Meta)
-const privateKey = fs.readFileSync(path.resolve('private_key.pem'), 'utf8');
+const privateKey = fs.readFileSync(path.resolve('private_key_pkcs8.pem'), 'utf8');
 
 function decryptAESKey(encryptedAESKey) {
   return crypto.privateDecrypt(
@@ -20,9 +20,6 @@ function decryptAESKey(encryptedAESKey) {
     Buffer.from(encryptedAESKey, 'base64')
   );
 }
-
-console.log('🔐 Decrypted AES Key Length:', aesKey.length);
-console.log('🔐 AES Key (Base64):', aesKey.toString('base64'));
 
 
 function decryptPayload(encryptedData, aesKey, ivBase64) {
@@ -49,6 +46,9 @@ export default async function handler(req, res) {
 
     // 1. Decrypt AES key (128-bit) using your private RSA key
     const aesKey = decryptAESKey(encrypted_aes_key); // Buffer of 16 bytes
+	
+	console.log('🔐 Decrypted AES Key Length:', aesKey.length);
+	console.log('🔐 AES Key (Base64):', aesKey.toString('base64'));
 
     // 2. Decrypt incoming data using AES key + IV
     const data = decryptPayload(encrypted_flow_data, aesKey, initial_vector);
