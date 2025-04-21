@@ -42,37 +42,39 @@ export default async function handler(req, res) {
     req.on('error', reject);
   });
 
+  // If this is a data_exchange (CONFIRM screen)
   if (signatureHeader) {
     try {
       const [keyBase64, ivBase64] = signatureHeader.split('::');
-
       const decrypted = decryptBody(rawBody, keyBase64, ivBase64);
-      console.log('📩 Decrypted data:', decrypted);
+      console.log('📥 Decrypted data:', decrypted);
 
       const { flight, title, first_name, last_name, dob } = decrypted;
 
       if (!flight || !title || !first_name || !last_name || !dob) {
-        const errorPayload = {
-          success: false,
-          message: 'Missing one or more fields: flight, title, first_name, last_name, dob'
-        };
-        const encryptedError = encryptBody(errorPayload, keyBase64, ivBase64);
+        const encryptedError = encryptBody(
+          { success: false, message: 'Missing required fields' },
+          keyBase64,
+          ivBase64
+        );
         return res.status(200).send(encryptedError);
       }
 
-      const successPayload = {
+      const response = {
         success: true,
         message: `Passenger ${title} ${first_name} ${last_name} added to flight ${flight}`
       };
-      const encryptedSuccess = encryptBody(successPayload, keyBase64, ivBase64);
-      return res.status(200).send(encryptedSuccess);
+
+      const encryptedResponse = encryptBody(response, keyBase64, ivBase64);
+      return res.status(200).send(encryptedResponse);
     } catch (error) {
-      console.error('❌ Decryption/Encryption error:', error);
-      return res.status(200).send('Encryption error');
+      console.error('❌ Decryption or encryption failed:', error);
+      return res.status(200).send('Encryption error'); // Meta will drop this but logs will help
     }
   }
 
-  // Non-encrypted fallback — just show flight list if needed
+  // If no signature header — assume it's the first screen loading flights
+  console.log('ℹ️ No signature — returning flight list (SELECT_FLIGHT screen)');
   return res.status(200).json({
     flights: [
       { id: '5O765', title: '5O765 | EGC → FAO | 24/04/2025' },
