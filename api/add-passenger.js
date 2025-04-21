@@ -1,5 +1,4 @@
 import crypto from 'crypto';
-import { parse } from 'querystring';
 
 export const config = {
   api: {
@@ -35,41 +34,44 @@ export default async function handler(req, res) {
     req.on('error', reject);
   });
 
-  // 🔓 Case 1: Encrypted request (CONFIRM screen)
   if (signatureHeader) {
-    try {
-      const [keyBase64, ivBase64] = signatureHeader.split('::');
-      const decrypted = decryptBody(rawBody, keyBase64, ivBase64);
-      console.log('📩 Decrypted payload:', decrypted);
+    const [keyBase64, ivBase64] = signatureHeader.split('::');
 
+    try {
+      const decrypted = rawBody ? decryptBody(rawBody, keyBase64, ivBase64) : {};
+
+      // Handle first screen — just flight list
+      if (!decrypted.flight) {
+        const flights = [
+          { id: '5O765', title: '5O765 | EGC → FAO | 24/04/2025' },
+          { id: '5O766', title: '5O766 | FAO → CHR | 24/04/2025' }
+        ];
+        const encryptedFlights = encryptBody({ flights }, keyBase64, ivBase64);
+        return res.status(200).send(encryptedFlights);
+      }
+
+      // Handle passenger submission
       const { flight, title, first_name, last_name, dob } = decrypted;
 
       if (!flight || !title || !first_name || !last_name || !dob) {
-        const encrypted = encryptBody(
-          { success: false, message: 'Missing one or more fields' },
-          keyBase64,
-          ivBase64
-        );
-        return res.status(200).send(encrypted);
+        const errorResponse = encryptBody({ success: false, message: 'Missing fields' }, keyBase64, ivBase64);
+        return res.status(200).send(errorResponse);
       }
 
-      const encrypted = encryptBody(
-        {
-          success: true,
-          message: `Passenger ${title} ${first_name} ${last_name} added to flight ${flight}`
-        },
-        keyBase64,
-        ivBase64
-      );
-      return res.status(200).send(encrypted);
+      const successPayload = {
+        success: true,
+        message: `Passenger ${title} ${first_name} ${last_name} added to flight ${flight}`
+      };
+
+      const encryptedSuccess = encryptBody(successPayload, keyBase64, ivBase64);
+      return res.status(200).send(encryptedSuccess);
     } catch (e) {
-      console.error('❌ Decryption failed:', e);
-      return res.status(200).send('Could not process encrypted payload');
+      console.error('❌ Decryption error:', e);
+      return res.status(200).send('Encryption failed');
     }
   }
 
-  // 🧾 Case 2: Plain request (first screen asking for flight options)
-  console.log('🛫 Plain request received — returning flight list');
+  // If no signature header — fallback (not likely used anymore)
   return res.status(200).json({
     flights: [
       { id: '5O765', title: '5O765 | EGC → FAO | 24/04/2025' },
