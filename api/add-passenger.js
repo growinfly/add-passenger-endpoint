@@ -1,6 +1,4 @@
 import crypto from 'crypto';
-console.log('🔐 Headers:', req.headers);
-
 export const config = {
   api: {
     bodyParser: false
@@ -33,6 +31,8 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(200).send('OK');
   }
+  
+  console.log('🔐 Headers:', req.headers);
 
   const signatureHeader = req.headers['x-meta-hub-signature'];
   let rawBody = '';
