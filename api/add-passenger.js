@@ -6,33 +6,32 @@ export default async function handler(req, res) {
   try {
     const { screen, data } = req.body;
 
-    console.log("🟡 Incoming WhatsApp Flow payload:", req.body);
+    console.log("📩 Incoming request from Flow:", req.body);
 
     if (screen === "CONFIRM") {
       const { flight, title, first_name, last_name, dob } = data;
 
-      // 🚧 Here you'd typically update your PNL or DB
-      console.log("🧾 Confirmed Passenger:");
-      console.log(`✈️ Flight: ${flight}`);
-      console.log(`👤 Name: ${title} ${first_name} ${last_name}`);
+      // ✨ Simulate saving or updating a PNL here
+      console.log(`🛫 Flight: ${flight}`);
+      console.log(`👤 Passenger: ${title} ${first_name} ${last_name}`);
       console.log(`🎂 DOB: ${dob}`);
 
       return res.status(200).json({
         screen: "CONFIRM",
         data: {
-          confirmation: `✅ ${title} ${first_name} ${last_name} added to ${flight}`
+          confirmation: `✅ ${title} ${first_name} ${last_name} was added to flight ${flight}.`
         }
       });
     }
 
-    // Optional: handle mid-screen data exchange (like validations or dynamic updates)
+    // Optional handling of mid-flow steps if needed
     return res.status(200).json({
       screen,
-      data: {} // No change to flow data unless needed
+      data: {}
     });
 
   } catch (err) {
-    console.error("❌ Flow processing failed:", err);
+    console.error("❌ Error processing Flow request:", err);
     return res.status(500).json({ error: "Internal Server Error" });
   }
 }
