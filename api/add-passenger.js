@@ -23,46 +23,57 @@ function encryptBody(payload, key, iv) {
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
-    return res.status(200).send('OK'); // WhatsApp expects 200 no matter what
+    return res.status(200).send('OK');
   }
 
+  const signatureHeader = req.headers['x-meta-hub-signature'];
   let rawBody = '';
+
   await new Promise((resolve, reject) => {
     req.on('data', chunk => (rawBody += chunk));
     req.on('end', resolve);
     req.on('error', reject);
   });
 
-  const verifyHeader = req.headers['x-meta-hub-signature'];
-  if (!verifyHeader) {
-    return res.status(200).send('Missing encryption header');
-  }
+  // 🔓 Case 1: Encrypted request (CONFIRM screen)
+  if (signatureHeader) {
+    try {
+      const [keyBase64, ivBase64] = signatureHeader.split('::');
+      const decrypted = decryptBody(rawBody, keyBase64, ivBase64);
+      console.log('📩 Decrypted payload:', decrypted);
 
-  try {
-    const [keyBase64, ivBase64] = verifyHeader.split('::');
-    const decryptedData = decryptBody(rawBody, keyBase64, ivBase64);
+      const { flight, title, first_name, last_name, dob } = decrypted;
 
-    console.log('📩 Decrypted data:', decryptedData);
+      if (!flight || !title || !first_name || !last_name || !dob) {
+        const encrypted = encryptBody(
+          { success: false, message: 'Missing one or more fields' },
+          keyBase64,
+          ivBase64
+        );
+        return res.status(200).send(encrypted);
+      }
 
-    const { flight, title, first_name, last_name, dob } = decryptedData;
-
-    if (!flight || !title || !first_name || !last_name || !dob) {
-      const errorPayload = {
-        success: false,
-        message: 'Missing one or more fields: flight, title, first_name, last_name, dob'
-      };
-      const encryptedError = encryptBody(errorPayload, keyBase64, ivBase64);
-      return res.status(200).send(encryptedError);
+      const encrypted = encryptBody(
+        {
+          success: true,
+          message: `Passenger ${title} ${first_name} ${last_name} added to flight ${flight}`
+        },
+        keyBase64,
+        ivBase64
+      );
+      return res.status(200).send(encrypted);
+    } catch (e) {
+      console.error('❌ Decryption failed:', e);
+      return res.status(200).send('Could not process encrypted payload');
     }
-
-    const successPayload = {
-      success: true,
-      message: `Passenger ${title} ${first_name} ${last_name} added to flight ${flight}`
-    };
-    const encryptedSuccess = encryptBody(successPayload, keyBase64, ivBase64);
-    return res.status(200).send(encryptedSuccess);
-  } catch (error) {
-    console.error('❌ Decryption or encryption failed:', error);
-    return res.status(200).send('Encryption failed'); // Meta will discard this but shows up in logs
   }
+
+  // 🧾 Case 2: Plain request (first screen asking for flight options)
+  console.log('🛫 Plain request received — returning flight list');
+  return res.status(200).json({
+    flights: [
+      { id: '5O765', title: '5O765 | EGC → FAO | 24/04/2025' },
+      { id: '5O766', title: '5O766 | FAO → CHR | 24/04/2025' }
+    ]
+  });
 }
