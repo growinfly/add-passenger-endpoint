@@ -8,13 +8,13 @@ export const config = {
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
-    return res.status(405).json({ message: 'Method Not Allowed' });
+    return res.status(200).json({ success: false, message: 'Only POST allowed' });
   }
 
   try {
     let body = '';
 
-    // Read stream manually
+    // Read raw body from stream
     await new Promise((resolve, reject) => {
       req.on('data', chunk => (body += chunk));
       req.on('end', resolve);
@@ -22,20 +22,24 @@ export default async function handler(req, res) {
     });
 
     const contentType = req.headers['content-type'];
-
     let parsedBody;
+
     if (contentType === 'application/json') {
       parsedBody = JSON.parse(body);
     } else {
-      parsedBody = parse(body);
+      parsedBody = parse(body); // Handles form-encoded input
     }
 
-    console.log('📨 Parsed Body:', parsedBody);
+    console.log('📨 Received body:', parsedBody);
 
     const { flight, title, first_name, last_name, dob } = parsedBody;
 
+    // If anything is missing, still return 200 OK but with a message
     if (!flight || !title || !first_name || !last_name || !dob) {
-      return res.status(400).json({ message: 'Missing required fields' });
+      return res.status(200).json({
+        success: false,
+        message: 'Missing one or more fields: flight, title, first_name, last_name, dob'
+      });
     }
 
     const passenger = {
@@ -46,12 +50,17 @@ export default async function handler(req, res) {
       dob
     };
 
+    console.log('✅ Passenger added:', passenger);
+
     return res.status(200).json({
       success: true,
-      message: `Passenger ${title} ${first_name} ${last_name} added for flight ${flight}.`
+      message: `Passenger ${title} ${first_name} ${last_name} for flight ${flight} received.`
     });
   } catch (error) {
-    console.error('❌ Error:', error);
-    return res.status(500).json({ success: false, message: 'Internal Server Error' });
+    console.error('❌ Handler error:', error);
+    return res.status(200).json({
+      success: false,
+      message: 'Something went wrong while processing the request.'
+    });
   }
 }
