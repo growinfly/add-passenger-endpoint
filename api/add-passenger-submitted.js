@@ -71,47 +71,7 @@ export default async function handler(req, res) {
   });
 
   try {
-    const json = JSON.parse(rawBody);
-
-    // Auto-response to normal WhatsApp messages (non-encrypted)
-    if (json.entry?.[0]?.changes?.[0]?.value?.messages) {
-      const message = json.entry[0].changes[0].value.messages[0];
-      const from = message.from;
-      const text = message.text?.body || '';
-
-      console.log('📩 Incoming message from user:', from);
-
-      const introMessage =
-        '👋 Welcome to GrowIN Fly!
-
-You can:
-1️⃣ Add a passenger to a flight
-2️⃣ Subscribe to PNL updates
-3️⃣ Submit a special request
-4️⃣ View upcoming flights
-
-Just reply with the corresponding number or say "start" to begin.';
-
-      const replyBody = {
-        messaging_product: 'whatsapp',
-        to: from,
-        type: 'text',
-        text: { body: introMessage }
-      };
-
-      await fetch(`https://graph.facebook.com/v19.0/${process.env.PHONE_NUMBER_ID}/messages`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${process.env.ACCESS_TOKEN}`
-        },
-        body: JSON.stringify(replyBody)
-      });
-
-      return res.status(200).send('Auto-response sent');
-    }
-
-    const { encrypted_aes_key, encrypted_flow_data, initial_vector } = json;
+    const { encrypted_aes_key, encrypted_flow_data, initial_vector } = JSON.parse(rawBody);
 
     const aesKey = decryptAESKey(encrypted_aes_key);
     const decrypted = decryptPayload(encrypted_flow_data, aesKey, initial_vector);
