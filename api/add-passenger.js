@@ -6,13 +6,14 @@ export default async function handler(req, res) {
   try {
     const { screen, data } = req.body;
 
-    console.log("📩 Incoming request from Flow:", req.body);
+    console.log("📨 Incoming Flow payload:", req.body);
 
+    // Handle the CONFIRM screen submission
     if (screen === "CONFIRM") {
       const { flight, title, first_name, last_name, dob } = data;
 
-      // ✨ Simulate saving or updating a PNL here
-      console.log(`🛫 Flight: ${flight}`);
+      // Here you can connect to PNL, validate, store to DB, send alerts etc.
+      console.log(`✈️ Flight: ${flight}`);
       console.log(`👤 Passenger: ${title} ${first_name} ${last_name}`);
       console.log(`🎂 DOB: ${dob}`);
 
@@ -24,14 +25,11 @@ export default async function handler(req, res) {
       });
     }
 
-    // Optional handling of mid-flow steps if needed
-    return res.status(200).json({
-      screen,
-      data: {}
-    });
+    // Default case (non-terminal screen) – echo back to Flow
+    return res.status(200).json({ screen, data: {} });
 
-  } catch (err) {
-    console.error("❌ Error processing Flow request:", err);
+  } catch (error) {
+    console.error("❌ Flow Handler Error:", error);
     return res.status(500).json({ error: "Internal Server Error" });
   }
 }
