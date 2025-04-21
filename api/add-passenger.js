@@ -72,34 +72,39 @@ module.exports = async function handler(req, res) {
 
   try {
     const json = JSON.parse(rawBody);
+    console.log('📥 Raw JSON:', JSON.stringify(json, null, 2));
 
     if (json.entry?.[0]?.changes?.[0]?.value?.messages) {
       const message = json.entry[0].changes[0].value.messages[0];
       const from = message.from;
       const text = message.text?.body || '';
 
-      console.log('📩 Incoming message from user:', from);
+      console.log('📩 Incoming message from user:', from, '| Text:', text);
 
-      const introMessage =
-        '👋 Welcome to GrowIN Fly!\n\nYou can:\n1️⃣ Add a passenger to a flight\n2️⃣ Subscribe to PNL updates\n3️⃣ Submit a special request\n4️⃣ View upcoming flights\n\nJust reply with the corresponding number or say "start" to begin.';
-
-      const replyBody = {
+      // Use hello_world template
+      const helloWorldTemplate = {
         messaging_product: 'whatsapp',
         to: from,
-        type: 'text',
-        text: { body: introMessage }
+        type: 'template',
+        template: {
+          name: 'hello_world',
+          language: { code: 'en_US' }
+        }
       };
 
-      await fetch(`https://graph.facebook.com/v19.0/${process.env.PHONE_NUMBER_ID}/messages`, {
+      const resp = await fetch(`https://graph.facebook.com/v19.0/${process.env.PHONE_NUMBER_ID}/messages`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${process.env.ACCESS_TOKEN}`
         },
-        body: JSON.stringify(replyBody)
+        body: JSON.stringify(helloWorldTemplate)
       });
 
-      return res.status(200).send('Auto-response sent');
+      const respJson = await resp.json();
+      console.log('📤 Sent hello_world template. Response:', JSON.stringify(respJson));
+
+      return res.status(200).send('hello_world sent');
     }
 
     const { encrypted_aes_key, encrypted_flow_data, initial_vector } = json;
