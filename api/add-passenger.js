@@ -72,6 +72,8 @@ module.exports = async function handler(req, res) {
 
   try {
     const json = JSON.parse(rawBody);
+	console.log('📥 Raw body received from webhook:', JSON.stringify(json, null, 2));
+
 
     if (json.entry?.[0]?.changes?.[0]?.value?.messages) {
       const message = json.entry[0].changes[0].value.messages[0];
