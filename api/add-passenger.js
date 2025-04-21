@@ -46,6 +46,21 @@ function encryptResponse(responseData, aesKey, iv) {
 }
 
 export default async function handler(req, res) {
+  if (req.method === 'GET') {
+    const VERIFY_TOKEN = 'mySecretToken123';
+    const mode = req.query['hub.mode'];
+    const token = req.query['hub.verify_token'];
+    const challenge = req.query['hub.challenge'];
+
+    if (mode && token && mode === 'subscribe' && token === VERIFY_TOKEN) {
+      console.log('✅ Webhook verified successfully');
+      return res.status(200).send(challenge);
+    } else {
+      console.warn('❌ Webhook verification failed');
+      return res.status(403).send('Forbidden');
+    }
+  }
+
   if (req.method !== 'POST') return res.status(200).send('OK');
 
   let rawBody = '';
@@ -112,7 +127,6 @@ export default async function handler(req, res) {
       return res.status(200).send(encrypted);
     }
 
-    // Default fallback removed in favor of explicit ping response
     const errorResponse = {
       screen: 'ERROR_SCREEN',
       data: {
