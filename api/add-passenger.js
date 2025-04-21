@@ -1,8 +1,8 @@
-import crypto from 'crypto';
-import fs from 'fs';
-import path from 'path';
+const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 
-export const config = {
+module.exports.config = {
   api: {
     bodyParser: false
   }
@@ -45,7 +45,7 @@ function encryptResponse(responseData, aesKey, iv) {
   return Buffer.concat([encrypted, tag]).toString('base64');
 }
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   if (req.method === 'GET') {
     const VERIFY_TOKEN = 'mySecretToken123';
     const mode = req.query['hub.mode'];
@@ -73,7 +73,6 @@ export default async function handler(req, res) {
   try {
     const json = JSON.parse(rawBody);
 
-    // Auto-response to normal WhatsApp messages (non-encrypted)
     if (json.entry?.[0]?.changes?.[0]?.value?.messages) {
       const message = json.entry[0].changes[0].value.messages[0];
       const from = message.from;
@@ -82,15 +81,7 @@ export default async function handler(req, res) {
       console.log('📩 Incoming message from user:', from);
 
       const introMessage =
-        '👋 Welcome to GrowIN Fly!
-
-You can:
-1️⃣ Add a passenger to a flight
-2️⃣ Subscribe to PNL updates
-3️⃣ Submit a special request
-4️⃣ View upcoming flights
-
-Just reply with the corresponding number or say "start" to begin.';
+        '👋 Welcome to GrowIN Fly!\n\nYou can:\n1️⃣ Add a passenger to a flight\n2️⃣ Subscribe to PNL updates\n3️⃣ Submit a special request\n4️⃣ View upcoming flights\n\nJust reply with the corresponding number or say "start" to begin.';
 
       const replyBody = {
         messaging_product: 'whatsapp',
@@ -179,4 +170,4 @@ Just reply with the corresponding number or say "start" to begin.';
     console.error('❌ Failed to handle encrypted request:', error);
     return res.status(421).send('Encryption error');
   }
-}
+};
