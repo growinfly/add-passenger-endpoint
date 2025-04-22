@@ -110,14 +110,22 @@ module.exports = async function handler(req, res) {
     console.log('📥 Decrypted payload:', decrypted);
     console.log('⚙️ Received Flow Action:', decrypted.action);
 
+    const flowVersion = decrypted.version || '3.0';
+
     if (decrypted.action === 'ping') {
-      const response = { data: { status: 'active' } };
+      const response = {
+        version: flowVersion,
+        data: {
+          status: 'active'
+        }
+      };
       const encrypted = encryptResponse(response, aesKey, Buffer.from(initial_vector, 'base64'));
       return res.status(200).send(encrypted);
     }
 
     if (decrypted.action === 'INIT') {
       const response = {
+        version: flowVersion,
         screen: 'SELECT_FLIGHT',
         data: {
           flights: [
@@ -136,6 +144,7 @@ module.exports = async function handler(req, res) {
 
       if (screen === 'PASSENGER_DETAILS') {
         const response = {
+          version: flowVersion,
           screen: 'CONFIRM',
           data: {
             flight: data.flight,
@@ -151,11 +160,12 @@ module.exports = async function handler(req, res) {
 
       if (screen === 'CONFIRM') {
         const response = {
+          version: flowVersion,
           screen: 'SUCCESS',
           data: {
             extension_message_response: {
               params: {
-                flow_token: flow_token,
+                flow_token,
                 passenger_name: `${data.title} ${data.first_name} ${data.last_name}`,
                 flight: data.flight
               }
@@ -168,6 +178,7 @@ module.exports = async function handler(req, res) {
     }
 
     const errorResponse = {
+      version: flowVersion,
       screen: 'ERROR_SCREEN',
       data: {
         error_message: `Unhandled action: ${decrypted.action}`
