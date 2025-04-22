@@ -141,8 +141,11 @@ module.exports = async function handler(req, res) {
     if (decrypted.action === 'data_exchange') {
       const { screen, data, flow_token } = decrypted;
       console.log('📤 Received data_exchange:', data);
+  
+	  const summaryText =
+		  data.summary ||
+		  `Flight: ${data.flight}\nName: ${data.title} ${data.first_name} ${data.last_name}\nDOB: ${data.dob}`;
 
-      const summaryText = `Flight: ${data.flight}\nName: ${data.title} ${data.first_name} ${data.last_name}\nDOB: ${data.dob}`;
 
       if (screen === 'PASSENGER_DETAILS') {
         const response = {
