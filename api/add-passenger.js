@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const fetch = require('node-fetch');
 
 module.exports.config = {
   api: {
@@ -8,14 +9,16 @@ module.exports.config = {
   }
 };
 
-// Flight data cache - could be moved to database in production
+// Flight data storage
 const FLIGHTS = {
   '5O765': '5O765 | EGC → FAO | 24/04/2025',
   '5O766': '5O766 | FAO → CHR | 24/04/2025'
 };
 
 const privateKey = fs.readFileSync(path.resolve('private_key_pkcs8.pem'), 'utf8');
+const VERIFY_TOKEN = 'mySecretToken123';
 
+// Helper Functions
 function decryptAESKey(encryptedAESKey) {
   return crypto.privateDecrypt(
     {
@@ -69,52 +72,55 @@ async function sendWhatsAppMessage(to, message) {
   });
 }
 
+// Main Handler
 module.exports = async function handler(req, res) {
-  if (req.method === 'GET') {
-    const VERIFY_TOKEN = 'mySecretToken123';
-    const mode = req.query['hub.mode'];
-    const token = req.query['hub.verify_token'];
-    const challenge = req.query['hub.challenge'];
-
-    if (mode && token && mode === 'subscribe' && token === VERIFY_TOKEN) {
-      console.log('✅ Webhook verified successfully');
-      return res.status(200).send(challenge);
-    }
-    console.warn('❌ Webhook verification failed');
-    return res.status(403).send('Forbidden');
-  }
-
-  if (req.method !== 'POST') return res.status(200).send('OK');
-
-  let rawBody = '';
-  await new Promise((resolve, reject) => {
-    req.on('data', chunk => (rawBody += chunk));
-    req.on('end', resolve);
-    req.on('error', reject);
-  });
-
   try {
+    // Handle verification request
+    if (req.method === 'GET') {
+      const mode = req.query['hub.mode'];
+      const token = req.query['hub.verify_token'];
+      const challenge = req.query['hub.challenge'];
+
+      if (mode && token && mode === 'subscribe' && token === VERIFY_TOKEN) {
+        console.log('✅ Webhook verified');
+        return res.status(200).send(challenge);
+      }
+      console.warn('❌ Verification failed');
+      return res.status(403).send('Forbidden');
+    }
+
+    // Only accept POST requests
+    if (req.method !== 'POST') return res.status(200).send('OK');
+
+    // Read raw body
+    let rawBody = '';
+    await new Promise((resolve, reject) => {
+      req.on('data', chunk => (rawBody += chunk));
+      req.on('end', resolve);
+      req.on('error', reject);
+    });
+
     const json = JSON.parse(rawBody);
-    console.log('📥 Raw body received:', JSON.stringify(json, null, 2));
+    console.log('📥 Received payload:', JSON.stringify(json, null, 2));
 
     // Handle regular WhatsApp messages
     if (json.entry?.[0]?.changes?.[0]?.value?.messages) {
       const message = json.entry[0].changes[0].value.messages[0];
-      const from = message.from;
-      await sendWhatsAppMessage(from, 
-        '👋 Welcome to GrowIN Fly!\n\nWe are here to help you manage your upcoming flights. In here, you can:\n\n✈️ Add a Passenger\n💬 Add a Special Request\n🔍 View My Flights\n📩 View My PNLs\n\nPlease choose an option to get started 😎\nGrowIN Fly AI Assistant');
-      return res.status(200).send('Auto-response sent');
+      await sendWhatsAppMessage(message.from, 
+        '👋 Welcome to GrowIN Fly!\n\nManage your flights:\n✈️ Add Passenger\n💬 Special Request\n🔍 View Flights\n📩 View PNLs');
+      return res.status(200).send('OK');
     }
 
     // Handle Flow API requests
     const { encrypted_aes_key, encrypted_flow_data, initial_vector } = json;
     const aesKey = decryptAESKey(encrypted_aes_key);
     const decrypted = decryptPayload(encrypted_flow_data, aesKey, initial_vector);
-    console.log('🔓 Decrypted payload:', decrypted);
+    console.log('🔓 Decrypted:', decrypted);
     
     const flowVersion = decrypted.version || '3.0';
     const ivBuffer = Buffer.from(initial_vector, 'base64');
 
+    // Handle different actions
     switch (decrypted.action) {
       case 'ping':
         return res.status(200).send(encryptResponse({
@@ -137,15 +143,15 @@ module.exports = async function handler(req, res) {
       case 'data_exchange': {
         const { screen, data, flow_token } = decrypted;
         
-        // Validate required fields for PASSENGER_DETAILS
+        // Handle PASSENGER_DETAILS screen
         if (screen === 'PASSENGER_DETAILS') {
           if (!data.first_name?.trim() || !data.last_name?.trim() || !data.dob?.trim()) {
             return res.status(200).send(encryptResponse({
               version: flowVersion,
               screen: 'PASSENGER_DETAILS',
               data: {
-                error: 'Please fill all required fields',
-                flight: data.flight // Preserve existing data
+                error: 'All fields are required',
+                flight: data.flight
               }
             }, aesKey, ivBuffer));
           }
@@ -154,7 +160,7 @@ module.exports = async function handler(req, res) {
             version: flowVersion,
             screen: 'CONFIRM',
             data: {
-              flight: FLIGHTS[data.flight] || data.flight, // Show enriched flight info if available
+              flight: FLIGHTS[data.flight] || data.flight,
               title: data.title,
               first_name: data.first_name,
               last_name: data.last_name,
@@ -163,14 +169,14 @@ module.exports = async function handler(req, res) {
           }, aesKey, ivBuffer));
         }
 
-        // Handle terminal CONFIRM screen
+        // Handle CONFIRM screen (terminal)
         if (screen === 'CONFIRM') {
           await sendWhatsAppMessage(decrypted.user_id, 
             `✅ Passenger confirmed!\n\n${data.title} ${data.first_name} ${data.last_name}\nFlight: ${data.flight}\nDOB: ${data.dob}`);
           
           return res.status(200).send(encryptResponse({
             version: flowVersion,
-            status: 'completed',
+            screen: 'CONFIRM', // Maintain screen property
             data: {
               extension_message_response: {
                 params: {
@@ -194,6 +200,9 @@ module.exports = async function handler(req, res) {
     }
   } catch (error) {
     console.error('❌ Handler error:', error);
-    return res.status(500).json({ error: 'Internal server error' });
+    return res.status(500).json({ 
+      error: 'Internal server error',
+      details: error.message 
+    });
   }
 };
