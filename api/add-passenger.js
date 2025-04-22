@@ -8,13 +8,7 @@ module.exports.config = {
   }
 };
 
-const FLIGHTS = {
-  '5O765': '5O765 | EGC → FAO | 24/04/2025',
-  '5O766': '5O766 | FAO → CHR | 24/04/2025'
-};
-
 const privateKey = fs.readFileSync(path.resolve('private_key_pkcs8.pem'), 'utf8');
-const VERIFY_TOKEN = 'mySecretToken123';
 
 function decryptAESKey(encryptedAESKey) {
   return crypto.privateDecrypt(
@@ -35,8 +29,8 @@ function decryptPayload(encryptedData, aesKey, ivBase64) {
   const flowDataBuffer = Buffer.from(encryptedData, 'base64');
   const iv = Buffer.from(ivBase64, 'base64');
   const TAG_LENGTH = 16;
-  const data = flowDataBuffer.subarray(0, flowDataBuffer.length - TAG_LENGTH);
-  const tag = flowDataBuffer.subarray(flowDataBuffer.length - TAG_LENGTH);
+  const data = flowDataBuffer.subarray(0, -TAG_LENGTH);
+  const tag = flowDataBuffer.subarray(-TAG_LENGTH);
   const decipher = crypto.createDecipheriv('aes-128-gcm', aesKey, iv);
   decipher.setAuthTag(tag);
   const decrypted = Buffer.concat([decipher.update(data), decipher.final()]);
@@ -52,138 +46,148 @@ function encryptResponse(responseData, aesKey, iv) {
 }
 
 module.exports = async function handler(req, res) {
-  try {
-    if (req.method === 'GET') {
-      const mode = req.query['hub.mode'];
-      const token = req.query['hub.verify_token'];
-      const challenge = req.query['hub.challenge'];
+  if (req.method === 'GET') {
+    const VERIFY_TOKEN = 'mySecretToken123';
+    const mode = req.query['hub.mode'];
+    const token = req.query['hub.verify_token'];
+    const challenge = req.query['hub.challenge'];
 
-      if (mode && token && mode === 'subscribe' && token === VERIFY_TOKEN) {
-        console.log('✅ Webhook verified');
-        return res.status(200).send(challenge);
-      }
-      console.warn('❌ Verification failed');
+    if (mode && token && mode === 'subscribe' && token === VERIFY_TOKEN) {
+      console.log('✅ Webhook verified successfully');
+      return res.status(200).send(challenge);
+    } else {
+      console.warn('❌ Webhook verification failed');
       return res.status(403).send('Forbidden');
     }
+  }
 
-    if (req.method !== 'POST') return res.status(200).send('OK');
+  if (req.method !== 'POST') return res.status(200).send('OK');
 
-    let rawBody = '';
-    await new Promise((resolve, reject) => {
-      req.on('data', chunk => (rawBody += chunk));
-      req.on('end', resolve);
-      req.on('error', reject);
-    });
+  let rawBody = '';
+  await new Promise((resolve, reject) => {
+    req.on('data', chunk => (rawBody += chunk));
+    req.on('end', resolve);
+    req.on('error', reject);
+  });
 
+  try {
     const json = JSON.parse(rawBody);
-    console.log('📥 Received payload:', JSON.stringify(json, null, 2));
+    console.log('📥 Raw body received from webhook:', JSON.stringify(json, null, 2));
+
+    if (json.entry?.[0]?.changes?.[0]?.value?.messages) {
+      const message = json.entry[0].changes[0].value.messages[0];
+      const from = message.from;
+      const text = message.text?.body || '';
+
+      console.log('📩 Incoming message from user:', from);
+
+      const introMessage =
+        '👋 Welcome to GrowIN Fly!\n\nWe are here to help you manage your upcoming flights. In here, you can:\n\n✈️ Add a Passenger\n💬 Add a Special Request\n🔍 View My Flights\n📩 View My PNLs\n\nPlease choose an option to get started 😎\nGrowIN Fly AI Assistant';
+
+      const replyBody = {
+        messaging_product: 'whatsapp',
+        to: from,
+        type: 'text',
+        text: { body: introMessage }
+      };
+
+      await fetch(`https://graph.facebook.com/v19.0/${process.env.PHONE_NUMBER_ID}/messages`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${process.env.ACCESS_TOKEN}`
+        },
+        body: JSON.stringify(replyBody)
+      });
+
+      return res.status(200).send('Auto-response sent');
+    }
 
     const { encrypted_aes_key, encrypted_flow_data, initial_vector } = json;
-    if (!encrypted_aes_key || !encrypted_flow_data || !initial_vector) {
-      return res.status(400).json({ error: 'Missing encrypted data fields' });
-    }
 
-    let aesKey, decrypted;
-    try {
-      aesKey = decryptAESKey(encrypted_aes_key);
-      decrypted = decryptPayload(encrypted_flow_data, aesKey, initial_vector);
-    } catch (err) {
-      console.error('🔐 Decryption failed:', err);
-      return res.status(400).json({ error: 'Invalid encrypted payload' });
-    }
-
-    console.log('🔓 Decrypted:', decrypted);
+    const aesKey = decryptAESKey(encrypted_aes_key);
+    const decrypted = decryptPayload(encrypted_flow_data, aesKey, initial_vector);
+    console.log('📥 Decrypted payload:', decrypted);
+    console.log('⚙️ Received Flow Action:', decrypted.action);
 
     const flowVersion = decrypted.version || '3.0';
-    const ivBuffer = Buffer.from(initial_vector, 'base64');
 
-    switch (decrypted.action) {
-      case 'ping':
-        return res.status(200).send(encryptResponse({
-          version: flowVersion,
-          data: { status: 'active' }
-        }, aesKey, ivBuffer));
+    if (decrypted.action === 'ping') {
+      const response = {
+        version: flowVersion,
+        data: {
+          status: 'active'
+        }
+      };
+      const encrypted = encryptResponse(response, aesKey, Buffer.from(initial_vector, 'base64'));
+      return res.status(200).send(encrypted);
+    }
 
-      case 'INIT':
-        return res.status(200).send(encryptResponse({
+    if (decrypted.action === 'INIT') {
+      const response = {
+        version: flowVersion,
+        screen: 'SELECT_FLIGHT',
+        data: {
+          flights: [
+            { id: '5O765', title: '5O765 | EGC → FAO | 24/04/2025' },
+            { id: '5O766', title: '5O766 | FAO → CHR | 24/04/2025' }
+          ]
+        }
+      };
+      const encrypted = encryptResponse(response, aesKey, Buffer.from(initial_vector, 'base64'));
+      return res.status(200).send(encrypted);
+    }
+
+    if (decrypted.action === 'data_exchange') {
+      const { screen, data, flow_token } = decrypted;
+      console.log('📤 Received data_exchange:', data);
+
+      if (screen === 'PASSENGER_DETAILS') {
+        const response = {
           version: flowVersion,
-          screen: 'SELECT_FLIGHT',
+          screen: 'CONFIRM',
           data: {
-            flights: Object.keys(FLIGHTS).map(id => ({
-              id,
-              title: FLIGHTS[id]
-            }))
+            flight: data.flight,
+            title: data.title,
+            first_name: data.first_name,
+            last_name: data.last_name,
+            dob: data.dob
           }
-        }, aesKey, ivBuffer));
-
-      case 'data_exchange': {
-        const { screen, data, flow_token } = decrypted;
-
-        if (screen === 'PASSENGER_DETAILS') {
-          if (!data.first_name?.trim() || !data.last_name?.trim() || !data.dob?.trim()) {
-            return res.status(200).send(encryptResponse({
-              version: flowVersion,
-              screen: 'PASSENGER_DETAILS',
-              data: {
-                error: 'All fields are required',
-                flight: data.flight
-              }
-            }, aesKey, ivBuffer));
-          }
-
-          return res.status(200).send(encryptResponse({
-            version: flowVersion,
-            screen: 'CONFIRM',
-            data: {
-              extension_message_response: {
-                params: {
-                  flight: FLIGHTS[data.flight] || data.flight,
-                  title: data.title || 'Mr./Ms.',
-                  first_name: data.first_name,
-                  last_name: data.last_name,
-                  dob: data.dob
-                }
-              },
-              exit_flow: true
-            }
-          }, aesKey, ivBuffer));
-        }
-
-        if (screen === 'CONFIRM') {
-          return res.status(200).send(encryptResponse({
-            version: flowVersion,
-            screen: 'CONFIRM',
-            data: {
-              extension_message_response: {
-                params: {
-                  flow_token,
-                  flight: data.flight,
-                  title: data.title || 'Mr./Ms.',
-                  first_name: data.first_name,
-                  last_name: data.last_name,
-                  dob: data.dob
-                }
-              },
-              exit_flow: true
-            }
-          }, aesKey, ivBuffer));
-        }
-
-        break;
+        };
+        const encrypted = encryptResponse(response, aesKey, Buffer.from(initial_vector, 'base64'));
+        return res.status(200).send(encrypted);
       }
 
-      default:
-        return res.status(200).send(encryptResponse({
+      if (screen === 'CONFIRM') {
+        const response = {
           version: flowVersion,
-          screen: 'ERROR_SCREEN',
-          data: { error_message: `Unhandled action: ${decrypted.action}` }
-        }, aesKey, ivBuffer));
+          screen: 'SUCCESS',
+          data: {
+            extension_message_response: {
+              params: {
+                flow_token,
+                passenger_name: `${data.title} ${data.first_name} ${data.last_name}`,
+                flight: data.flight
+              }
+            }
+          }
+        };
+        const encrypted = encryptResponse(response, aesKey, Buffer.from(initial_vector, 'base64'));
+        return res.status(200).send(encrypted);
+      }
     }
+
+    const errorResponse = {
+      version: flowVersion,
+      screen: 'ERROR_SCREEN',
+      data: {
+        error_message: `Unhandled action: ${decrypted.action}`
+      }
+    };
+    const encrypted = encryptResponse(errorResponse, aesKey, Buffer.from(initial_vector, 'base64'));
+    return res.status(200).send(encrypted);
   } catch (error) {
-    console.error('❌ Handler error:', error);
-    return res.status(500).json({
-      error: 'Internal server error',
-      details: error.message
-    });
+    console.error('❌ Failed to handle encrypted request:', error);
+    return res.status(421).send('Encryption error');
   }
 };
