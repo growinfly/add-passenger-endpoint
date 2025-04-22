@@ -82,7 +82,7 @@ module.exports = async function handler(req, res) {
       console.log('📩 Incoming message from user:', from);
 
       const introMessage =
-  '\t\t👋 Welcome to GrowIN Fly!\n\nWe are here to help you manage your upcoming flights. In here, you can:\n\n✈️ Add a Passenger\n💬 Add a Special Request\n🔍 View My Flights\n📩 View My PNLs\n\nPlease choose an option to get started 😎\nGrowIN Fly AI Assistant';
+  '		👋 Welcome to GrowIN Fly!\n\nWe are here to help you manage your upcoming flights. In here, you can:\n\n✈️ Add a Passenger\n💬 Add a Special Request\n🔍 View My Flights\n📩 View My PNLs\n\nPlease choose an option to get started 😎\nGrowIN Fly AI Assistant';
 
       const replyBody = {
         messaging_product: 'whatsapp',
@@ -131,13 +131,18 @@ module.exports = async function handler(req, res) {
     }
 
     if (decrypted.action === 'data_exchange') {
-      const { flight, title, first_name, last_name, dob } = decrypted.data;
-      console.log('📤 Received data_exchange:', decrypted.data);
-      if (!flight || !title || !first_name || !last_name || !dob) {
+      const { screen, data, flow_token } = decrypted;
+      console.log('📤 Received data_exchange:', data);
+
+      if (screen === 'CONFIRM') {
         const response = {
-          screen: 'CONFIRM_PASSENGER',
+          screen: 'CONFIRM',
           data: {
-            error_message: 'Missing required passenger information'
+            flight: data.flight,
+            title: data.title,
+            first_name: data.first_name,
+            last_name: data.last_name,
+            dob: data.dob
           }
         };
         const encrypted = encryptResponse(response, aesKey, Buffer.from(initial_vector, 'base64'));
@@ -149,9 +154,9 @@ module.exports = async function handler(req, res) {
         data: {
           extension_message_response: {
             params: {
-              flow_token: decrypted.flow_token,
-              passenger_name: `${title} ${first_name} ${last_name}`,
-              flight
+              flow_token: flow_token,
+              passenger_name: `${data.title} ${data.first_name} ${data.last_name}`,
+              flight: data.flight
             }
           }
         }
