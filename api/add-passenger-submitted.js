@@ -1,8 +1,8 @@
-const crypto = require('crypto');
-const fs = require('fs');
-const path = require('path');
+import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
 
-module.exports.config = {
+export const config = {
   api: {
     bodyParser: false
   }
@@ -45,7 +45,7 @@ function encryptResponse(responseData, aesKey, iv) {
   return Buffer.concat([encrypted, tag]).toString('base64');
 }
 
-module.exports = async function handler(req, res) {
+export default async function handler(req, res) {
   if (req.method === 'GET') {
     const VERIFY_TOKEN = 'mySecretToken123';
     const mode = req.query['hub.mode'];
@@ -71,40 +71,7 @@ module.exports = async function handler(req, res) {
   });
 
   try {
-    const json = JSON.parse(rawBody);
-	console.log('📥 Raw body received from webhook:', JSON.stringify(json, null, 2));
-
-
-    if (json.entry?.[0]?.changes?.[0]?.value?.messages) {
-      const message = json.entry[0].changes[0].value.messages[0];
-      const from = message.from;
-      const text = message.text?.body || '';
-
-      console.log('📩 Incoming message from user:', from);
-
-      const introMessage =
-  '		👋 Welcome to GrowIN Fly!\n\nWe are here to help you manage your upcoming flights. In here, you can:\n\n✈️ Add a Passenger\n💬 Add a Special Request\n🔍 View My Flights\n📩 View My PNLs\n\nPlease choose an option to get started 😎\nGrowIN Fly AI Assistant';
-
-      const replyBody = {
-        messaging_product: 'whatsapp',
-        to: from,
-        type: 'text',
-        text: { body: introMessage }
-      };
-
-      await fetch(`https://graph.facebook.com/v19.0/${process.env.PHONE_NUMBER_ID}/messages`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${process.env.ACCESS_TOKEN}`
-        },
-        body: JSON.stringify(replyBody)
-      });
-
-      return res.status(200).send('Auto-response sent');
-    }
-
-    const { encrypted_aes_key, encrypted_flow_data, initial_vector } = json;
+    const { encrypted_aes_key, encrypted_flow_data, initial_vector } = JSON.parse(rawBody);
 
     const aesKey = decryptAESKey(encrypted_aes_key);
     const decrypted = decryptPayload(encrypted_flow_data, aesKey, initial_vector);
@@ -172,4 +139,4 @@ module.exports = async function handler(req, res) {
     console.error('❌ Failed to handle encrypted request:', error);
     return res.status(421).send('Encryption error');
   }
-};
+}
