@@ -158,25 +158,24 @@ module.exports = async function handler(req, res) {
         const encrypted = encryptResponse(response, aesKey, Buffer.from(initial_vector, 'base64'));
         return res.status(200).send(encrypted);
       }
+	  
+	  if (screen === 'CONFIRM') {
+		  const response = {
+			version: flowVersion,
+			screen: 'CONFIRM',
+			data: {
+			  flight: data.flight,
+			  title: data.title,
+			  first_name: data.first_name,
+			  last_name: data.last_name,
+			  dob: data.dob,
+			  summary: `Flight: ${data.flight}\nName: ${data.title} ${data.first_name} ${data.last_name}\nDOB: ${data.dob}`
+			}
+		  };
+		  const encrypted = encryptResponse(response, aesKey, Buffer.from(initial_vector, 'base64'));
+		  return res.status(200).send(encrypted);
+		}
 
-      if (screen === 'CONFIRM') {
-        const response = {
-          version: flowVersion,
-          screen: 'SUCCESS',
-          data: {
-            extension_message_response: {
-              params: {
-                flow_token,
-                passenger_name: `${data.title} ${data.first_name} ${data.last_name}`,
-                flight: data.flight
-              }
-            }
-          }
-        };
-        const encrypted = encryptResponse(response, aesKey, Buffer.from(initial_vector, 'base64'));
-        return res.status(200).send(encrypted);
-      }
-    }
 
     const errorResponse = {
       version: flowVersion,
