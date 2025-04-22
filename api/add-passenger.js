@@ -104,13 +104,14 @@ module.exports = async function handler(req, res) {
     }
 
     const { encrypted_aes_key, encrypted_flow_data, initial_vector } = json;
-
     const aesKey = decryptAESKey(encrypted_aes_key);
     const decrypted = decryptPayload(encrypted_flow_data, aesKey, initial_vector);
+
     console.log('📥 Decrypted payload:', decrypted);
     console.log('⚙️ Received Flow Action:', decrypted.action);
 
     const flowVersion = decrypted.version || '3.0';
+    const { screen, data, flow_token } = decrypted;
 
     if (decrypted.action === 'ping') {
       const response = {
@@ -139,12 +140,7 @@ module.exports = async function handler(req, res) {
     }
 
     if (decrypted.action === 'data_exchange') {
-      const { screen, data, flow_token } = decrypted;
-      console.log('📤 Received data_exchange:', data);
-
-      const summaryText =
-        data.summary ||
-        `Flight: ${data.flight}\nName: ${data.title} ${data.first_name} ${data.last_name}\nDOB: ${data.dob}`;
+      const summaryText = data.summary || `Flight: ${data.flight}\nName: ${data.title} ${data.first_name} ${data.last_name}\nDOB: ${data.dob}`;
 
       if (screen === 'PASSENGER_DETAILS') {
         const response = {
@@ -163,27 +159,27 @@ module.exports = async function handler(req, res) {
         return res.status(200).send(encrypted);
       }
 
-		  if (screen === 'CONFIRM') {
-	  console.log('✅ Passenger confirmed:', data);
+      if (screen === 'CONFIRM') {
+        console.log('✅ Passenger confirmed:', data);
 
-	  const response = {
-		version: flowVersion,
-		screen: 'SUCCESS',
-		data: {
-		  extension_message_response: {
-			params: {
-			  flow_token,
-			  passenger_name: `${data.title} ${data.first_name} ${data.last_name}`,
-			  flight: data.flight
-			}
-		  }
-		}
-	  };
+        const response = {
+          version: flowVersion,
+          screen: 'SUCCESS',
+          data: {
+            extension_message_response: {
+              params: {
+                flow_token,
+                passenger_name: `${data.title} ${data.first_name} ${data.last_name}`,
+                flight: data.flight
+              }
+            }
+          }
+        };
 
-	  const encrypted = encryptResponse(response, aesKey, Buffer.from(initial_vector, 'base64'));
-	  return res.status(200).send(encrypted);
-	}
-
+        const encrypted = encryptResponse(response, aesKey, Buffer.from(initial_vector, 'base64'));
+        return res.status(200).send(encrypted);
+      }
+    }
 
     const errorResponse = {
       version: flowVersion,
@@ -192,8 +188,10 @@ module.exports = async function handler(req, res) {
         error_message: `Unhandled action: ${decrypted.action}`
       }
     };
+
     const encrypted = encryptResponse(errorResponse, aesKey, Buffer.from(initial_vector, 'base64'));
     return res.status(200).send(encrypted);
+
   } catch (error) {
     console.error('❌ Failed to handle encrypted request:', error);
     return res.status(421).send('Encryption error');
