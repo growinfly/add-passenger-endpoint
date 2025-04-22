@@ -72,7 +72,7 @@ module.exports = async function handler(req, res) {
 
   try {
     const json = JSON.parse(rawBody);
-	console.log('📥 Raw body received from webhook:', JSON.stringify(json, null, 2));
+    console.log('📥 Raw body received from webhook:', JSON.stringify(json, null, 2));
 
     if (json.entry?.[0]?.changes?.[0]?.value?.messages) {
       const message = json.entry[0].changes[0].value.messages[0];
@@ -82,7 +82,7 @@ module.exports = async function handler(req, res) {
       console.log('📩 Incoming message from user:', from);
 
       const introMessage =
-  '		👋 Welcome to GrowIN Fly!\n\nWe are here to help you manage your upcoming flights. In here, you can:\n\n✈️ Add a Passenger\n💬 Add a Special Request\n🔍 View My Flights\n📩 View My PNLs\n\nPlease choose an option to get started 😎\nGrowIN Fly AI Assistant';
+  '👋 Welcome to GrowIN Fly!\n\nWe are here to help you manage your upcoming flights. In here, you can:\n\n✈️ Add a Passenger\n💬 Add a Special Request\n🔍 View My Flights\n📩 View My PNLs\n\nPlease choose an option to get started 😎\nGrowIN Fly AI Assistant';
 
       const replyBody = {
         messaging_product: 'whatsapp',
@@ -134,7 +134,7 @@ module.exports = async function handler(req, res) {
       const { screen, data, flow_token } = decrypted;
       console.log('📤 Received data_exchange:', data);
 
-      if (screen === 'CONFIRM') {
+      if (screen === 'PASSENGER_DETAILS') {
         const response = {
           screen: 'CONFIRM',
           data: {
@@ -149,21 +149,22 @@ module.exports = async function handler(req, res) {
         return res.status(200).send(encrypted);
       }
 
-      const response = {
-        screen: 'SUCCESS',
-        data: {
-          extension_message_response: {
-            params: {
-              flow_token: flow_token,
-              passenger_name: `${data.title} ${data.first_name} ${data.last_name}`,
-              flight: data.flight
+      if (screen === 'CONFIRM') {
+        const response = {
+          screen: 'SUCCESS',
+          data: {
+            extension_message_response: {
+              params: {
+                flow_token: flow_token,
+                passenger_name: `${data.title} ${data.first_name} ${data.last_name}`,
+                flight: data.flight
+              }
             }
           }
-        }
-      };
-
-      const encrypted = encryptResponse(response, aesKey, Buffer.from(initial_vector, 'base64'));
-      return res.status(200).send(encrypted);
+        };
+        const encrypted = encryptResponse(response, aesKey, Buffer.from(initial_vector, 'base64'));
+        return res.status(200).send(encrypted);
+      }
     }
 
     const errorResponse = {
