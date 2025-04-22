@@ -74,7 +74,6 @@ module.exports = async function handler(req, res) {
     const json = JSON.parse(rawBody);
 	console.log('📥 Raw body received from webhook:', JSON.stringify(json, null, 2));
 
-
     if (json.entry?.[0]?.changes?.[0]?.value?.messages) {
       const message = json.entry[0].changes[0].value.messages[0];
       const from = message.from;
@@ -83,7 +82,7 @@ module.exports = async function handler(req, res) {
       console.log('📩 Incoming message from user:', from);
 
       const introMessage =
-  '		👋 Welcome to GrowIN Fly!\n\nWe are here to help you manage your upcoming flights. In here, you can:\n\n✈️ Add a Passenger\n💬 Add a Special Request\n🔍 View My Flights\n📩 View My PNLs\n\nPlease choose an option to get started 😎\nGrowIN Fly AI Assistant';
+  '\t\t👋 Welcome to GrowIN Fly!\n\nWe are here to help you manage your upcoming flights. In here, you can:\n\n✈️ Add a Passenger\n💬 Add a Special Request\n🔍 View My Flights\n📩 View My PNLs\n\nPlease choose an option to get started 😎\nGrowIN Fly AI Assistant';
 
       const replyBody = {
         messaging_product: 'whatsapp',
@@ -109,6 +108,7 @@ module.exports = async function handler(req, res) {
     const aesKey = decryptAESKey(encrypted_aes_key);
     const decrypted = decryptPayload(encrypted_flow_data, aesKey, initial_vector);
     console.log('📥 Decrypted payload:', decrypted);
+    console.log('⚙️ Received Flow Action:', decrypted.action);
 
     if (decrypted.action === 'ping') {
       const response = { data: { status: 'active' } };
@@ -132,6 +132,7 @@ module.exports = async function handler(req, res) {
 
     if (decrypted.action === 'data_exchange') {
       const { flight, title, first_name, last_name, dob } = decrypted.data;
+      console.log('📤 Received data_exchange:', decrypted.data);
       if (!flight || !title || !first_name || !last_name || !dob) {
         const response = {
           screen: 'CONFIRM_PASSENGER',
