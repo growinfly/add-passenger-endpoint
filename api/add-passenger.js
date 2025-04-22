@@ -170,9 +170,9 @@ module.exports = async function handler(req, res) {
 		  console.log('✅ Passenger confirmed:', data);
 		  
         const response = {
-          version: flowVersion,          
+          version: flowVersion,
+		  screen: 'SUCCESS',  // ✅ required to comply with Flow structure
           data: {
-            status: 'success',
             message: 'Passenger successfully added to PNL!',             
           }
         };
