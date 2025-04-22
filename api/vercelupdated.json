@@ -1,0 +1,184 @@
+{
+  "version": "7.0",
+  "data_api_version": "3.0",
+  "routing_model": {
+    "SELECT_FLIGHT": ["PASSENGER_DETAILS"],
+    "PASSENGER_DETAILS": ["CONFIRM"],
+    "CONFIRM": []
+  },
+  "screens": [
+    {
+      "id": "SELECT_FLIGHT",
+      "title": "Select Flight",
+      "data": {
+        "flights": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "title": { "type": "string" }
+            }
+          },
+          "__example__": [
+            { "id": "5O765", "title": "5O765 | EGC → FAO | 24/04/2025" },
+            { "id": "5O766", "title": "5O766 | FAO → CHR | 24/04/2025" }
+          ]
+        }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "select_flight_form",
+            "children": [
+              {
+                "type": "Dropdown",
+                "label": "Flight",
+                "name": "flight",
+                "data-source": "${data.flights}",
+                "required": true
+              },
+              {
+                "type": "Footer",
+                "label": "Continue",
+                "on-click-action": {
+                  "name": "navigate",
+                  "next": { "type": "screen", "name": "PASSENGER_DETAILS" },
+                  "payload": {
+                    "flight": "${form.flight}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "PASSENGER_DETAILS",
+      "title": "Passenger Details",
+      "data": {
+        "flight": { "type": "string", "__example__": "5O765" }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "passenger_form",
+            "children": [
+              {
+                "type": "Dropdown",
+                "label": "Title",
+                "name": "title",
+                "data-source": [
+                  { "id": "MR", "title": "MR" },
+                  { "id": "MRS", "title": "MRS" },
+                  { "id": "CHD", "title": "CHD (Child)" },
+                  { "id": "INF", "title": "INF (Infant)" }
+                ],
+                "required": true
+              },
+              {
+                "type": "TextInput",
+                "label": "First Name",
+                "name": "first_name",
+                "required": true
+              },
+              {
+                "type": "TextInput",
+                "label": "Last Name",
+                "name": "last_name",
+                "required": true
+              },
+              {
+                "type": "TextInput",
+                "label": "Date of Birth",
+                "name": "dob",
+                "helper-text": "Format: DD/MM/YYYY",
+                "required": true
+              },
+              {
+                "type": "Footer",
+                "label": "Continue",
+                "on-click-action": {
+                  "name": "data_exchange",
+                    "payload": {
+                    "flight": "${data.flight}",
+                    "title": "${form.title}",
+                    "first_name": "${form.first_name}",
+                    "last_name": "${form.last_name}",
+                    "dob": "${form.dob}",
+                    "summary": "${form.title} ${form.first_name} ${form.last_name} on flight ${data.flight}, born ${form.dob}"
+
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "CONFIRM",
+      "title": "Confirm Passenger",
+      "terminal": true,
+      "data": {
+        "summary": {
+          "type": "string",
+          "__example__": "Flight: 5O765 | EGC → FAO | 24/04/2025\nName: MR John Doe\nDOB: 01/01/1990"
+        },
+        "flight": {
+          "type": "string",
+          "__example__": "5O765"
+        },
+        "title": {
+          "type": "string",
+          "__example__": "MR"
+        },
+        "first_name": {
+          "type": "string",
+          "__example__": "John"
+        },
+        "last_name": {
+          "type": "string",
+          "__example__": "Doe"
+        },
+        "dob": {
+          "type": "string",
+          "__example__": "01/01/1990"
+        }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "TextBody",
+            "text": "You're about to add the following passenger:"
+          },
+          {
+            "type": "TextBody",
+            "text": "${data.summary}"
+          },
+          {
+            "type": "Footer",
+            "label": "Confirm",
+            "on-click-action": {
+              "name": "data_exchange",
+              "payload": {
+                "flight": "${data.flight}",
+                "title": "${data.title}",
+                "first_name": "${data.first_name}",
+                "last_name": "${data.last_name}",
+                "dob": "${data.dob}",
+                "summary": "${data.summary}"
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

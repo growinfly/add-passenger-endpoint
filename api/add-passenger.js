@@ -173,7 +173,10 @@ module.exports = async function handler(req, res) {
           version: flowVersion,
 		  screen: 'SUCCESS',  // ✅ required to comply with Flow structure
           data: {
-            message: 'Passenger successfully added to PNL!',             
+            extension_message_response: {
+				type: 'text',
+				message: `✅ Passenger ${data.title} ${data.first_name} ${data.last_name} successfully added to ${data.flight}!`
+			  }           
           }
         };
         const encrypted = encryptResponse(response, aesKey, Buffer.from(initial_vector, 'base64'));
