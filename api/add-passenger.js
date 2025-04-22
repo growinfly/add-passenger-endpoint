@@ -51,24 +51,6 @@ function encryptResponse(responseData, aesKey, iv) {
   return Buffer.concat([encrypted, tag]).toString('base64');
 }
 
-async function sendWhatsAppMessage(to, message) {
-  const replyBody = {
-    messaging_product: 'whatsapp',
-    to,
-    type: 'text',
-    text: { body: message }
-  };
-
-  return fetch(`https://graph.facebook.com/v19.0/${process.env.PHONE_NUMBER_ID}/messages`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${process.env.ACCESS_TOKEN}`
-    },
-    body: JSON.stringify(replyBody)
-  });
-}
-
 module.exports = async function handler(req, res) {
   try {
     if (req.method === 'GET') {
@@ -95,26 +77,6 @@ module.exports = async function handler(req, res) {
 
     const json = JSON.parse(rawBody);
     console.log('📥 Received payload:', JSON.stringify(json, null, 2));
-
-    if (json.entry?.[0]?.changes?.[0]?.value?.messages) {
-      const message = json.entry[0].changes[0].value.messages[0];
-      await fetch(`https://graph.facebook.com/v19.0/${process.env.PHONE_NUMBER_ID}/messages`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${process.env.ACCESS_TOKEN}`
-        },
-        body: JSON.stringify({
-          messaging_product: 'whatsapp',
-          to: message.from,
-          type: 'text',
-          text: {
-            body: '👋 Welcome to GrowIN Fly!\n\nManage your flights:\n✈️ Add Passenger\n💬 Special Request\n🔍 View Flights\n📩 View PNLs'
-          }
-        })
-      });
-      return res.status(200).send('OK');
-    }
 
     const { encrypted_aes_key, encrypted_flow_data, initial_vector } = json;
     if (!encrypted_aes_key || !encrypted_flow_data || !initial_vector) {
@@ -175,34 +137,19 @@ module.exports = async function handler(req, res) {
             data: {
               extension_message_response: {
                 params: {
-                  flight: data.flight ? (FLIGHTS[data.flight] || data.flight) : 'Unknown flight',
+                  flight: FLIGHTS[data.flight] || data.flight,
                   title: data.title || 'Mr./Ms.',
                   first_name: data.first_name,
                   last_name: data.last_name,
                   dob: data.dob
                 }
-              }
+              },
+              exit_flow: true
             }
           }, aesKey, ivBuffer));
         }
 
         if (screen === 'CONFIRM') {
-          await fetch(`https://graph.facebook.com/v19.0/${process.env.PHONE_NUMBER_ID}/messages`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${process.env.ACCESS_TOKEN}`
-            },
-            body: JSON.stringify({
-              messaging_product: 'whatsapp',
-              to: decrypted.user_id,
-              type: 'text',
-              text: {
-                body: `✅ Passenger confirmed!\n\n${data.title || 'Mr./Ms.'} ${data.first_name} ${data.last_name}\nFlight: ${data.flight}\nDOB: ${data.dob}`
-              }
-            })
-          });
-
           return res.status(200).send(encryptResponse({
             version: flowVersion,
             screen: 'CONFIRM',
@@ -216,10 +163,12 @@ module.exports = async function handler(req, res) {
                   last_name: data.last_name,
                   dob: data.dob
                 }
-              }
+              },
+              exit_flow: true
             }
           }, aesKey, ivBuffer));
         }
+
         break;
       }
 
