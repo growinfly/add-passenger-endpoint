@@ -165,24 +165,25 @@ module.exports = async function handler(req, res) {
       }
 	  
 	  
+     	
+		if (screen === 'CONFIRM') {
+	  console.log('✅ Passenger confirmed:', data);
 
-      if (screen === 'CONFIRM') {
-		  console.log('✅ Passenger confirmed:', data);
-		  
-        const response = {
-          version: flowVersion,
-		  screen: 'SUCCESS',  // ✅ required to comply with Flow structure
-          data: {
-            extension_message_response: {
-				type: 'text',
-				message: `✅ Passenger ${data.title} ${data.first_name} ${data.last_name} successfully added to ${data.flight}!`
-			  }           
-          }
-        };
-        const encrypted = encryptResponse(response, aesKey, Buffer.from(initial_vector, 'base64'));
-        return res.status(200).send(encrypted);
-      }
-    }
+	  const response = {
+		version: flowVersion,
+		screen: 'SUCCESS', // ✅ required to comply with Flow structure
+		data: {
+		  extension_message_response: {
+			type: 'text',
+			message: `✅ Passenger ${data.title} ${data.first_name} ${data.last_name} successfully added to ${data.flight}!`
+		  }
+		}
+	  };
+
+	  const encrypted = encryptResponse(response, aesKey, Buffer.from(initial_vector, 'base64'));
+	  return res.status(200).send(encrypted);
+	}
+
 
     const errorResponse = {
       version: flowVersion,
