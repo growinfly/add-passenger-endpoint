@@ -166,16 +166,19 @@ module.exports = async function handler(req, res) {
       if (screen === 'CONFIRM') {
         console.log('✅ Passenger confirmed:', data);
 
-        const response = {
-          version: flowVersion,
-          screen: 'SUCCESS', // Required for Flow to complete properly
-          data: {
-            extension_message_response: {
-              type: 'text',
-              message: `✅ Passenger ${data.title} ${data.first_name} ${data.last_name} successfully added to ${data.flight}!`
+        
+		const response = {
+        screen: 'SUCCESS',
+        data: {
+          extension_message_response: {
+            params: {
+              flow_token: decrypted.flow_token,
+              passenger_name: `${title} ${first_name} ${last_name}`,
+              flight
             }
           }
-        };
+        }
+      };
 
         const encrypted = encryptResponse(response, aesKey, Buffer.from(initial_vector, 'base64'));
         return res.status(200).send(encrypted);
