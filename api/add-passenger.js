@@ -163,18 +163,17 @@ module.exports = async function handler(req, res) {
         const encrypted = encryptResponse(response, aesKey, Buffer.from(initial_vector, 'base64'));
         return res.status(200).send(encrypted);
       }
+	  
+	  
 
       if (screen === 'CONFIRM') {
+		  console.log('✅ Passenger confirmed:', data);
+		  
         const response = {
-          version: flowVersion,
-          screen: 'CONFIRM',
+          version: flowVersion,          
           data: {
-            flight: data.flight,
-            title: data.title,
-            first_name: data.first_name,
-            last_name: data.last_name,
-            dob: data.dob,
-            summary: summaryText
+            status: 'success',
+            message: 'Passenger successfully added to PNL!',             
           }
         };
         const encrypted = encryptResponse(response, aesKey, Buffer.from(initial_vector, 'base64'));
