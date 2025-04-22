@@ -1,7 +1,6 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
-const fetch = require('node-fetch');
 
 module.exports.config = {
   api: {
@@ -99,8 +98,21 @@ module.exports = async function handler(req, res) {
 
     if (json.entry?.[0]?.changes?.[0]?.value?.messages) {
       const message = json.entry[0].changes[0].value.messages[0];
-      await sendWhatsAppMessage(message.from,
-        '👋 Welcome to GrowIN Fly!\n\nManage your flights:\n✈️ Add Passenger\n💬 Special Request\n🔍 View Flights\n📩 View PNLs');
+      await fetch(`https://graph.facebook.com/v19.0/${process.env.PHONE_NUMBER_ID}/messages`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${process.env.ACCESS_TOKEN}`
+        },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          to: message.from,
+          type: 'text',
+          text: {
+            body: '👋 Welcome to GrowIN Fly!\n\nManage your flights:\n✈️ Add Passenger\n💬 Special Request\n🔍 View Flights\n📩 View PNLs'
+          }
+        })
+      });
       return res.status(200).send('OK');
     }
 
@@ -175,8 +187,21 @@ module.exports = async function handler(req, res) {
         }
 
         if (screen === 'CONFIRM') {
-          await sendWhatsAppMessage(decrypted.user_id,
-            `✅ Passenger confirmed!\n\n${data.title || 'Mr./Ms.'} ${data.first_name} ${data.last_name}\nFlight: ${data.flight}\nDOB: ${data.dob}`);
+          await fetch(`https://graph.facebook.com/v19.0/${process.env.PHONE_NUMBER_ID}/messages`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${process.env.ACCESS_TOKEN}`
+            },
+            body: JSON.stringify({
+              messaging_product: 'whatsapp',
+              to: decrypted.user_id,
+              type: 'text',
+              text: {
+                body: `✅ Passenger confirmed!\n\n${data.title || 'Mr./Ms.'} ${data.first_name} ${data.last_name}\nFlight: ${data.flight}\nDOB: ${data.dob}`
+              }
+            })
+          });
 
           return res.status(200).send(encryptResponse({
             version: flowVersion,
