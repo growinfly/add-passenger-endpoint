@@ -142,6 +142,8 @@ module.exports = async function handler(req, res) {
       const { screen, data, flow_token } = decrypted;
       console.log('📤 Received data_exchange:', data);
 
+      const summaryText = `Flight: ${data.flight}\nName: ${data.title} ${data.first_name} ${data.last_name}\nDOB: ${data.dob}`;
+
       if (screen === 'PASSENGER_DETAILS') {
         const response = {
           version: flowVersion,
@@ -152,30 +154,30 @@ module.exports = async function handler(req, res) {
             first_name: data.first_name,
             last_name: data.last_name,
             dob: data.dob,
-            summary: `Flight: ${data.flight}\nName: ${data.title} ${data.first_name} ${data.last_name}\nDOB: ${data.dob}`
+            summary: summaryText
           }
         };
         const encrypted = encryptResponse(response, aesKey, Buffer.from(initial_vector, 'base64'));
         return res.status(200).send(encrypted);
       }
-	  
-	  if (screen === 'CONFIRM') {
-		  const response = {
-			version: flowVersion,
-			screen: 'CONFIRM',
-			data: {
-			  flight: data.flight,
-			  title: data.title,
-			  first_name: data.first_name,
-			  last_name: data.last_name,
-			  dob: data.dob,
-			  summary: `Flight: ${data.flight}\nName: ${data.title} ${data.first_name} ${data.last_name}\nDOB: ${data.dob}`
-			}
-		  };
-		  const encrypted = encryptResponse(response, aesKey, Buffer.from(initial_vector, 'base64'));
-		  return res.status(200).send(encrypted);
-		}
 
+      if (screen === 'CONFIRM') {
+        const response = {
+          version: flowVersion,
+          screen: 'CONFIRM',
+          data: {
+            flight: data.flight,
+            title: data.title,
+            first_name: data.first_name,
+            last_name: data.last_name,
+            dob: data.dob,
+            summary: summaryText
+          }
+        };
+        const encrypted = encryptResponse(response, aesKey, Buffer.from(initial_vector, 'base64'));
+        return res.status(200).send(encrypted);
+      }
+    }
 
     const errorResponse = {
       version: flowVersion,
