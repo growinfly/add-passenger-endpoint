@@ -66,6 +66,7 @@ module.exports = async function handler(req, res) {
     const aesKey = decryptAESKey(encrypted_aes_key);
     const decrypted = decryptPayload(encrypted_flow_data, aesKey, initial_vector);
     const flowVersion = decrypted.version || '3.0';
+    const action = decrypted.action;
     const phone = user?.wa_id;
 
     console.log('🔍 WhatsApp user phone:', phone);
@@ -93,14 +94,20 @@ module.exports = async function handler(req, res) {
       title: `${f.flight_id} | ${f.from_airport} → ${f.to_airport} | ${new Date(f.flight_date).toLocaleDateString()}`
     }));
 
-    const response = {
-      version: flowVersion,
-      screen: 'FLIGHT_LIST',
-      data: { flights: formatted }
-    };
+    // ✅ Only send response if this is an INIT action
+    if (action === 'INIT') {
+      const response = {
+        version: flowVersion,
+        screen: 'VIEW_FLIGHTS', // This must match the screen ID in your Flow JSON
+        data: { flights: formatted }
+      };
 
-    const encrypted = encryptResponse(response, aesKey, Buffer.from(initial_vector, 'base64'));
-    return res.status(200).send(encrypted);
+      const encrypted = encryptResponse(response, aesKey, Buffer.from(initial_vector, 'base64'));
+      return res.status(200).send(encrypted);
+    }
+
+    // Fallback if another action is sent
+    return res.status(200).send('ACK');
 
   } catch (err) {
     console.error('❌ View Flights Handler Error:', err);
