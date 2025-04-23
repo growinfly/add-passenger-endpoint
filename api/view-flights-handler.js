@@ -16,7 +16,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // Temporary phone-to-client map for testing
 const PHONE_TO_CLIENT_ID = {
-  '351916666626': 'ff519970-5edf-44b8-8191-d012299e0362' // Replace as needed
+  '351923539415': 'ff519970-5edf-44b8-8191-d012299e0362' // Replace as needed
 };
 
 // Encryption/decryption helpers
@@ -98,7 +98,7 @@ module.exports = async function handler(req, res) {
     if (action === 'INIT') {
       const response = {
         version: flowVersion,
-        screen: 'VIEW_FLIGHTS', // This must match the screen ID in your Flow JSON
+        screen: 'MAIN_MENU', // This must match the screen ID in your Flow JSON
         data: { flights: formatted }
       };
 
