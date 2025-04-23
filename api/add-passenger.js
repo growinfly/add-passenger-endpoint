@@ -1,7 +1,6 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
-const { createClient } = require('@supabase/supabase-js');
 
 module.exports.config = {
   api: {
@@ -11,24 +10,19 @@ module.exports.config = {
 
 const privateKey = fs.readFileSync(path.resolve('private_key_pkcs8.pem'), 'utf8');
 
-// Supabase config
-const SUPABASE_URL = 'https://hjpfoxxnoopxmiukthpf.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUz...'; // Replace with actual key
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-const CLIENT_FLOW_TOKEN_MAP = {
-  'fram-token-xx': '76990aea-ad41-4b33-8b1e-5f20aed120fc',
-  'tn1-token-xx': 'a416cf25-0404-47b8-9aec-5d17f6e0ad3f',
-  'mt-token-xx': 'c9d6e6ad-3b3e-4024-8348-412136015c8d',
-  'tui-token-xx': 'ff519970-5edf-44b8-8191-d012299e0362'
-};
-
 function decryptAESKey(encryptedAESKey) {
-  return crypto.privateDecrypt({
-    key: crypto.createPrivateKey({ key: privateKey, format: 'pem', type: 'pkcs8' }),
-    padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
-    oaepHash: 'sha256'
-  }, Buffer.from(encryptedAESKey, 'base64'));
+  return crypto.privateDecrypt(
+    {
+      key: crypto.createPrivateKey({
+        key: privateKey,
+        format: 'pem',
+        type: 'pkcs8'
+      }),
+      padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
+      oaepHash: 'sha256'
+    },
+    Buffer.from(encryptedAESKey, 'base64')
+  );
 }
 
 function decryptPayload(encryptedData, aesKey, ivBase64) {
@@ -54,11 +48,15 @@ function encryptResponse(responseData, aesKey, iv) {
 module.exports = async function handler(req, res) {
   if (req.method === 'GET') {
     const VERIFY_TOKEN = 'mySecretToken123';
-    const { ['hub.mode']: mode, ['hub.verify_token']: token, ['hub.challenge']: challenge } = req.query;
+    const mode = req.query['hub.mode'];
+    const token = req.query['hub.verify_token'];
+    const challenge = req.query['hub.challenge'];
 
-    if (mode === 'subscribe' && token === VERIFY_TOKEN) {
+    if (mode && token && mode === 'subscribe' && token === VERIFY_TOKEN) {
+      console.log('✅ Webhook verified successfully');
       return res.status(200).send(challenge);
     } else {
+      console.warn('❌ Webhook verification failed');
       return res.status(403).send('Forbidden');
     }
   }
@@ -74,46 +72,75 @@ module.exports = async function handler(req, res) {
 
   try {
     const json = JSON.parse(rawBody);
-    const { encrypted_aes_key, encrypted_flow_data, initial_vector } = json;
+    console.log('📥 Raw body received from webhook:', JSON.stringify(json, null, 2));
 
+    if (json.entry?.[0]?.changes?.[0]?.value?.messages) {
+      const message = json.entry[0].changes[0].value.messages[0];
+      const from = message.from;
+      const text = message.text?.body || '';
+
+      console.log('📩 Incoming message from user:', from);
+
+      const introMessage =
+        '👋 Welcome to GrowIN Fly!\n\nWe are here to help you manage your upcoming flights. In here, you can:\n\n✈️ Add a Passenger\n💬 Add a Special Request\n🔍 View My Flights\n📩 View My PNLs\n\nPlease choose an option to get started 😎\nGrowIN Fly AI Assistant';
+
+      const replyBody = {
+        messaging_product: 'whatsapp',
+        to: from,
+        type: 'text',
+        text: { body: introMessage }
+      };
+
+      await fetch(`https://graph.facebook.com/v19.0/${process.env.PHONE_NUMBER_ID}/messages`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${process.env.ACCESS_TOKEN}`
+        },
+        body: JSON.stringify(replyBody)
+      });
+
+      return res.status(200).send('Auto-response sent');
+    }
+
+    const { encrypted_aes_key, encrypted_flow_data, initial_vector } = json;
     const aesKey = decryptAESKey(encrypted_aes_key);
     const decrypted = decryptPayload(encrypted_flow_data, aesKey, initial_vector);
+
+    console.log('📥 Decrypted payload:', decrypted);
+    console.log('⚙️ Received Flow Action:', decrypted.action);
+
     const flowVersion = decrypted.version || '3.0';
-    const flow_token = decrypted.flow_token;
+    const { screen, data, flow_token } = decrypted;
+
+    if (decrypted.action === 'ping') {
+      const response = {
+        version: flowVersion,
+        data: {
+          status: 'active'
+        }
+      };
+      const encrypted = encryptResponse(response, aesKey, Buffer.from(initial_vector, 'base64'));
+      return res.status(200).send(encrypted);
+    }
 
     if (decrypted.action === 'INIT') {
-      const clientId = CLIENT_FLOW_TOKEN_MAP[flow_token];
-      let flights = [];
-
-      if (clientId) {
-        const { data: flightClients } = await supabase
-          .from('flight_clients')
-          .select('flight_id')
-          .eq('client_id', clientId);
-
-        const flightIds = flightClients.map(f => f.flight_id);
-        const { data: flightData } = await supabase
-          .from('flights')
-          .select('id, flight_id, from_airport, to_airport, flight_date')
-          .in('id', flightIds);
-
-        flights = flightData.map(f => ({
-          id: f.id,
-          title: `${f.flight_id} | ${f.from_airport} → ${f.to_airport} | ${new Date(f.flight_date).toLocaleDateString()}`
-        }));
-      }
-
       const response = {
         version: flowVersion,
         screen: 'SELECT_FLIGHT',
-        data: { flights }
+        data: {
+          flights: [
+            { id: '5O765', title: '5O765 | EGC → FAO | 24/04/2025' },
+            { id: '5O766', title: '5O766 | FAO → CHR | 24/04/2025' }
+          ]
+        }
       };
       const encrypted = encryptResponse(response, aesKey, Buffer.from(initial_vector, 'base64'));
       return res.status(200).send(encrypted);
     }
 
     if (decrypted.action === 'data_exchange') {
-      const { screen, data } = decrypted;
+      const summaryText = data.summary || `Flight: ${data.flight}\nName: ${data.title} ${data.first_name} ${data.last_name}\nDOB: ${data.dob}`;
 
       if (screen === 'PASSENGER_DETAILS') {
         const response = {
@@ -125,7 +152,7 @@ module.exports = async function handler(req, res) {
             first_name: data.first_name,
             last_name: data.last_name,
             dob: data.dob,
-            summary: `${data.title} ${data.first_name} ${data.last_name} on flight ${data.flight}, born ${data.dob}`
+            summary: summaryText
           }
         };
         const encrypted = encryptResponse(response, aesKey, Buffer.from(initial_vector, 'base64'));
@@ -133,6 +160,8 @@ module.exports = async function handler(req, res) {
       }
 
       if (screen === 'CONFIRM') {
+        console.log('✅ Passenger confirmed:', data);
+
         const response = {
           version: flowVersion,
           screen: 'SUCCESS',
@@ -146,6 +175,7 @@ module.exports = async function handler(req, res) {
             }
           }
         };
+
         const encrypted = encryptResponse(response, aesKey, Buffer.from(initial_vector, 'base64'));
         return res.status(200).send(encrypted);
       }
@@ -158,6 +188,7 @@ module.exports = async function handler(req, res) {
         error_message: `Unhandled action: ${decrypted.action}`
       }
     };
+
     const encrypted = encryptResponse(errorResponse, aesKey, Buffer.from(initial_vector, 'base64'));
     return res.status(200).send(encrypted);
 
